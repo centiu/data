@@ -42,7 +42,7 @@ def load_data():
 
 df = load_data()
 
-st.title("🌍 Global steel production by route")
+st.title("🌍 Global steel raw material production by type")
 st.caption("Source: Global Energy Monitor – Global Iron & Steel Tracker")
 
 # KPIs
@@ -72,7 +72,7 @@ top = (
 top_long = top.melt(
     id_vars=["Country"],
     value_vars=["Pig iron produced (ttpa)", "DRI produced (ttpa)"],
-    var_name="Route",
+    var_name="type",
     value_name="Mtpa"
 )
 
@@ -80,27 +80,28 @@ fig_bar = px.bar(
     top_long,
     x="Mtpa",
     y="Country",
-    color="Route",
+    color="type",
     orientation="h",
-    title="Steel production by route (Top countries)",
+    title="Steel production by type (Top countries)",
 )
 st.plotly_chart(fig_bar, use_container_width=True)
 
 # Global share donut
 share_df = pd.DataFrame({
-    "Route": ["BF–BOF (Pig iron)", "DRI–EAF"],
+    "type": ["BF–BOF (Pig iron)", "DRI–EAF"],
     "Production (Mtpa)": [total_pig_iron, total_dri],
 })
 
 fig_pie = px.pie(
     share_df,
-    names="Route",
+    names="type",
     values="Production (Mtpa)",
     hole=0.4,
-    title="Global production share by route",
+    title="Global production share by type",
 )
 st.plotly_chart(fig_pie, use_container_width=True)
 
 with st.expander("📊 View data"):
     st.dataframe(df, use_container_width=True)
+
 
