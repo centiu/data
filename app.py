@@ -19,7 +19,6 @@ def inject_css(theme: str):
         text = "rgba(255,255,255,0.92)"
         mutetext = "rgba(255,255,255,0.68)"
         shadow = "0 1px 2px rgba(0,0,0,0.35)"
-        grid = "rgba(255,255,255,0.10)"
         metric_bg = "rgba(255,255,255,0.06)"
         exp_bg = "rgba(255,255,255,0.05)"
     else:
@@ -29,7 +28,6 @@ def inject_css(theme: str):
         text = "rgba(0,0,0,0.92)"
         mutetext = "rgba(0,0,0,0.65)"
         shadow = "0 1px 2px rgba(0,0,0,0.06)"
-        grid = "rgba(0,0,0,0.06)"
         metric_bg = "rgba(245,245,247,0.85)"
         exp_bg = "rgba(245,245,247,0.55)"
 
@@ -53,7 +51,7 @@ def inject_css(theme: str):
           letter-spacing: -0.02em;
         }}
 
-        /* Caption tone */
+        /* Caption / text tone */
         .stCaption, .stMarkdown p {{
           color: {text};
         }}
@@ -114,19 +112,23 @@ def inject_css(theme: str):
 
 
 def style_plotly(fig, theme: str, title: str | None = None, subtitle: str | None = None):
-    """Apply a clean dashboard style to Plotly figures, adapting to theme."""
+    """Apply a clean dashboard style to Plotly figures, adapting to theme.
+    Fix: place legend below plot; subtitle below title; avoid overlap.
+    """
     if theme == "dark":
-        paper = "rgba(0,0,0,0)"
-        plot = "rgba(0,0,0,0)"
         font_color = "rgba(255,255,255,0.90)"
+        sub_color = "rgba(255,255,255,0.65)"
         grid_color = "rgba(255,255,255,0.10)"
         axis_line = "rgba(255,255,255,0.18)"
+        hover_bg = "rgba(20,20,26,0.95)"
+        hover_border = "rgba(255,255,255,0.12)"
     else:
-        paper = "rgba(0,0,0,0)"
-        plot = "rgba(0,0,0,0)"
         font_color = "rgba(0,0,0,0.90)"
+        sub_color = "rgba(0,0,0,0.60)"
         grid_color = "rgba(0,0,0,0.06)"
         axis_line = "rgba(0,0,0,0.12)"
+        hover_bg = "rgba(255,255,255,0.95)"
+        hover_border = "rgba(0,0,0,0.10)"
 
     fig.update_layout(
         template="plotly_white",
@@ -136,16 +138,22 @@ def style_plotly(fig, theme: str, title: str | None = None, subtitle: str | None
             size=13,
             color=font_color,
         ),
-        margin=dict(l=10, r=10, t=70, b=10),
-        paper_bgcolor=paper,
-        plot_bgcolor=plot,
+        # More top space for title/subtitle; more bottom for legend
+        margin=dict(l=10, r=10, t=90, b=70),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         legend=dict(
             title_text="",
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
+            yanchor="top",
+            y=-0.18,  # legend below plot area
             xanchor="left",
             x=0,
+            font=dict(color=font_color),
+        ),
+        hoverlabel=dict(
+            bgcolor=hover_bg,
+            bordercolor=hover_border,
             font=dict(color=font_color),
         ),
     )
@@ -167,24 +175,60 @@ def style_plotly(fig, theme: str, title: str | None = None, subtitle: str | None
         ticks="outside",
     )
 
-    # Optional subtitle using an annotation
+    # Subtitle: below title, above plot
     if subtitle:
         fig.update_layout(
             annotations=[
                 dict(
                     text=subtitle,
                     x=0,
-                    y=1.12,
+                    y=1.07,
                     xref="paper",
                     yref="paper",
                     showarrow=False,
                     align="left",
-                    font=dict(size=12, color=font_color.replace("0.90", "0.65")),
+                    font=dict(size=12, color=sub_color),
                 )
             ]
         )
 
     return fig
+
+
+def style_table(df: pd.DataFrame, theme: str):
+    """Force dataframe to match theme (Streamlit grid can ignore CSS)."""
+    if theme == "dark":
+        bg = "#0b0b0f"
+        panel = "rgba(255,255,255,0.06)"
+        border = "rgba(255,255,255,0.10)"
+        text = "rgba(255,255,255,0.90)"
+    else:
+        bg = "#ffffff"
+        panel = "rgba(245,245,247,0.85)"
+        border = "rgba(0,0,0,0.06)"
+        text = "rgba(0,0,0,0.90)"
+
+    return (
+        df.style
+        .set_table_styles([
+            {"selector": "thead th", "props": [
+                ("background-color", panel),
+                ("color", text),
+                ("border-bottom", f"1px solid {border}"),
+                ("font-weight", "600"),
+            ]},
+            {"selector": "tbody td", "props": [
+                ("background-color", panel),
+                ("color", text),
+                ("border-bottom", f"1px solid {border}"),
+            ]},
+            {"selector": "table", "props": [
+                ("background-color", bg),
+                ("border-collapse", "collapse"),
+            ]},
+        ])
+        .set_properties(**{"border": f"1px solid {border}"})
+    )
 
 
 # Sidebar theme toggle
@@ -360,11 +404,19 @@ fig_pie = px.pie(
     hole=0.42,
     title="Global primary steelmaking route split",
 )
+
+# Improve donut readability across themes
+if THEME == "dark":
+    fig_pie.update_traces(textfont_color="rgba(255,255,255,0.92)")
+else:
+    fig_pie.update_traces(textfont_color="rgba(0,0,0,0.85)")
+
 fig_pie.update_traces(
     textposition="inside",
     textinfo="percent",
     hovertemplate="<b>%{label}</b><br>%{value:,.0f} Mtpa<br>%{percent}<extra></extra>",
 )
+
 fig_pie = style_plotly(
     fig_pie,
     THEME,
@@ -394,15 +446,15 @@ if show_mix and pig_col in df.columns and dri_col in df.columns:
     )
     mix = mix.sort_values("Total (Mtpa)", ascending=False)
 
+    display_mix = mix.rename(columns={
+        pig_col: "BF–BOF (Pig iron) Mtpa",
+        dri_col: "DRI–EAF (DRI) Mtpa",
+    })
+
+    styled_mix = style_table(display_mix, THEME)
+
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.dataframe(
-        mix.rename(columns={
-            pig_col: "BF–BOF (Pig iron) Mtpa",
-            dri_col: "DRI–EAF (DRI) Mtpa",
-        }),
-        use_container_width=True,
-        height=460
-    )
+    st.dataframe(styled_mix, use_container_width=True, height=460)
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.write("")
