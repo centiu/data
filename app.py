@@ -1,61 +1,86 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
 import plotly.express as px
-from pathlib import Path
 
-st.set_page_config(page_title="Steel & Mining Data Dashboard", layout="wide")
+st.set_page_config(page_title="Global Steel Routes", layout="wide")
 
-st.title("Steel & Mining Data Dashboard")
-st.caption("A public-data portfolio project focused on Australia iron ore and global steelmaking routes.")
+# --- Load data ---
+@st.cache_data
+def load_data():
+    df = pd.read_csv("steel_routes.csv")
 
-# --- OPTIONAL: Google Analytics (GA4) ---
-# Replace G-XXXXXXXXXX with your Measurement ID
-GA_MEASUREMENT_ID = "G-XXXXXXXXXX"
-st.components.v1.html(
-    f"""
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){{dataLayer.push(arguments);}}
-      gtag('js', new Date());
-      gtag('config', '{GA_MEASUREMENT_ID}');
-    </script>
-    """,
-    height=0,
+    # Replace 'unknown' with NaN
+    df = df.replace("unknown", pd.NA)
+
+    # Convert numeric columns
+    numeric_cols = df.columns[1:]
+    for col in numeric_cols:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.replace(".", "", regex=False)
+            .astype(float)
+        )
+
+    # Remove global aggregate row
+    df = df[df["Country"] != "Global"]
+
+    # Convert ttp a → Mtpa
+    df[numeric_cols] = df[numeric_cols] / 1000
+
+    return df
+
+df = load_data()
+
+# --- Header ---
+st.title("🌍 Global steel production by route")
+st.caption("Source: Global Energy Monitor – Global Iron & Steel Tracker")
+
+# --- KPIs ---
+total_pig_iron = df["Pig iron produced (ttpa)"].sum()
+total_dri = df["DRI produced (ttpa)"].sum()
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Pig iron (BF–BOF)", f"{total_pig_iron:,.0f} Mtpa")
+col2.metric("DRI (DRI–EAF)", f"{total_dri:,.0f} Mtpa")
+col3.metric("DRI share", f"{(total_dri / (total_pig_iron + total_dri) * 100):.1f}%")
+col4.metric("Producing countries", df[df["Pig iron produced (ttpa)"].notna()].shape[0])
+
+# --- Top countries ---
+top_n = st.slider("Top countries", 5, 25, 15)
+
+top = (
+    df[["Country", "Pig iron produced (ttpa)", "DRI produced (ttpa)"]]
+    .fillna(0)
+    .assign(Total=lambda x: x.sum(axis=1))
+    .sort_values("Total", ascending=False)
+    .head(top_n)
 )
 
-# --- Load sample data (replace with real sources later) ---
-DATA_DIR = Path("data")
-iron_ore_path = DATA_DIR / "iron_ore_australia_sample.csv"
-steel_routes_path = DATA_DIR / "steel_routes_sample.csv"
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Australia Iron Ore (sample)")
-    if iron_ore_path.exists():
-        df_iron = pd.read_csv(iron_ore_path)
-        st.dataframe(df_iron, use_container_width=True)
-
-        fig = px.line(df_iron, x="year", y="value", title="Sample trend")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Add data/iron_ore_australia_sample.csv to see this chart.")
-
-with col2:
-    st.subheader("Steelmaking Routes (sample)")
-    if steel_routes_path.exists():
-        df_routes = pd.read_csv(steel_routes_path)
-        st.dataframe(df_routes, use_container_width=True)
-
-        fig2 = px.bar(df_routes, x="route", y="plants", title="Plants by route (sample)")
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.info("Add data/steel_routes_sample.csv to see this chart.")
-
-st.markdown("---")
-st.subheader("Sources & notes")
-st.write(
-    "This dashboard is built from public datasets and reports. Each chart includes attribution in the project README."
+fig_bar = px.bar(
+    top,
+    x="Country",
+    y=["Pig iron produced (ttpa)", "DRI produced (ttpa)"],
+    title="Steel production by route (Top countries)",
+    labels={"value": "Mtpa", "variable": "Production route"},
 )
+st.plotly_chart(fig_bar, use_container_width=True)
+
+# --- Global share ---
+share_df = pd.DataFrame({
+    "Route": ["BF–BOF (Pig iron)", "DRI–EAF"],
+    "Production (Mtpa)": [total_pig_iron, total_dri],
+})
+
+fig_pie = px.pie(
+    share_df,
+    names="Route",
+    values="Production (Mtpa)",
+    hole=0.4,
+    title="Global production share by route",
+)
+st.plotly_chart(fig_pie, use_container_width=True)
+
+# --- Data table ---
+with st.expander("📊 View data"):
+    st.dataframe(df, use_container_width=True)
