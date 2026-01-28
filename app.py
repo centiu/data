@@ -7,26 +7,46 @@ st.set_page_config(page_title="Global Steel Routes", layout="wide")
 # --- Load data ---
 @st.cache_data
 def load_data():
-    path = "data/steel_routes.csv"   # change to "data/steel_routes.csv" if it's inside /data
+    path = pathlib.Path("steel_routes.csv")  # or "data/steel_routes.csv"
 
-    # Try: TSV + UTF-8, then TSV + latin1, then CSV + UTF-8, then CSV + latin1
-    for sep in ["\t", ","]:
-        for enc in ["utf-8", "utf-8-sig", "cp1252", "latin-1"]:
-            try:
-                df = pd.read_csv(path, sep=sep, encoding=enc, engine="python")
-                # If it loaded as a single column, wrong separator; try next
-                if df.shape[1] == 1:
-                    continue
-                return df
-            except Exception:
-                pass
+    # Read raw bytes, decode safely
+    raw_bytes = path.read_bytes()
+    try:
+        raw_text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raw_text = raw_bytes.decode("cp1252", errors="replace")
 
-    # If we got here, nothing worked
-    raise RuntimeError(
-        "Could not read steel_routes.csv. Try saving as UTF-8 and/or confirm separator is tab."
-    )
+    # Remove trailing semicolons at end of lines (your file has "... ;")
+    # Also remove accidental empty columns due to trailing separators
+    cleaned_lines = []
+    for line in raw_text.splitlines():
+        cleaned_lines.append(line.rstrip().rstrip(";"))
+    cleaned_text = "\n".join(cleaned_lines)
 
-df = load_data()
+    # Now parse as standard CSV (comma-delimited)
+    df = pd.read_csv(StringIO(cleaned_text), sep=",", engine="python")
+
+    # Standard cleanup
+    df = df.replace("unknown", pd.NA)
+
+    # Convert numeric columns (everything except Country)
+    numeric_cols = [c for c in df.columns if c != "Country"]
+    for col in numeric_cols:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.replace(".", "", regex=False)   # 1.014.117 -> 1014117
+        )
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Drop Global if present
+    if "Global" in df["Country"].values:
+        df = df[df["Country"] != "Global"]
+
+    # Convert ttp a -> Mtpa
+    df[numeric_cols] = df[numeric_cols] / 1000.0
+
+    return df
 
 # --- Header ---
 st.title("🌍 Global steel production by route")
@@ -80,5 +100,6 @@ st.plotly_chart(fig_pie, use_container_width=True)
 # --- Data table ---
 with st.expander("📊 View data"):
     st.dataframe(df, use_container_width=True)
+
 
 
