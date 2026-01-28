@@ -6,13 +6,204 @@ from io import StringIO
 
 st.set_page_config(page_title="Global Steel Routes", layout="wide")
 
-# Explicit schema (more robust than "everything except Country")
+# ----------------------------
+# Theme (Light / Dark) styling
+# ----------------------------
+
+def inject_css(theme: str):
+    """Inject an Apple-ish UI CSS theme (light/dark)."""
+    if theme == "dark":
+        bg = "#0b0b0f"
+        panel = "rgba(255,255,255,0.06)"
+        border = "rgba(255,255,255,0.10)"
+        text = "rgba(255,255,255,0.92)"
+        mutetext = "rgba(255,255,255,0.68)"
+        shadow = "0 1px 2px rgba(0,0,0,0.35)"
+        grid = "rgba(255,255,255,0.10)"
+        metric_bg = "rgba(255,255,255,0.06)"
+        exp_bg = "rgba(255,255,255,0.05)"
+    else:
+        bg = "#ffffff"
+        panel = "rgba(245,245,247,0.75)"
+        border = "rgba(0,0,0,0.06)"
+        text = "rgba(0,0,0,0.92)"
+        mutetext = "rgba(0,0,0,0.65)"
+        shadow = "0 1px 2px rgba(0,0,0,0.06)"
+        grid = "rgba(0,0,0,0.06)"
+        metric_bg = "rgba(245,245,247,0.85)"
+        exp_bg = "rgba(245,245,247,0.55)"
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+          background: {bg};
+          color: {text};
+        }}
+
+        /* Layout width + padding */
+        .block-container {{
+          padding-top: 1.2rem;
+          padding-bottom: 2rem;
+          max-width: 1200px;
+        }}
+
+        /* Headings */
+        h1, h2, h3 {{
+          letter-spacing: -0.02em;
+        }}
+
+        /* Caption tone */
+        .stCaption, .stMarkdown p {{
+          color: {text};
+        }}
+        .muted {{
+          color: {mutetext};
+        }}
+
+        /* Card wrapper */
+        .card {{
+          background: {panel};
+          border: 1px solid {border};
+          border-radius: 16px;
+          padding: 16px 18px;
+          box-shadow: {shadow};
+        }}
+
+        /* Metrics as tiles */
+        [data-testid="stMetric"] {{
+          background: {metric_bg};
+          border: 1px solid {border};
+          border-radius: 16px;
+          padding: 14px 14px;
+          box-shadow: {shadow};
+        }}
+        [data-testid="stMetricLabel"] p {{
+          font-size: 0.9rem;
+          opacity: 0.85;
+          margin-bottom: 4px;
+          letter-spacing: -0.01em;
+        }}
+        [data-testid="stMetricValue"] div {{
+          font-size: 1.6rem;
+          letter-spacing: -0.02em;
+        }}
+
+        /* Expanders */
+        details {{
+          border-radius: 14px;
+          border: 1px solid {border};
+          background: {exp_bg};
+          padding: 6px 10px;
+        }}
+
+        /* Sidebar spacing */
+        section[data-testid="stSidebar"] .block-container {{
+          padding-top: 1rem;
+        }}
+
+        /* Subtle horizontal rule */
+        hr {{
+          border: none;
+          border-top: 1px solid {border};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def style_plotly(fig, theme: str, title: str | None = None, subtitle: str | None = None):
+    """Apply a clean dashboard style to Plotly figures, adapting to theme."""
+    if theme == "dark":
+        paper = "rgba(0,0,0,0)"
+        plot = "rgba(0,0,0,0)"
+        font_color = "rgba(255,255,255,0.90)"
+        grid_color = "rgba(255,255,255,0.10)"
+        axis_line = "rgba(255,255,255,0.18)"
+    else:
+        paper = "rgba(0,0,0,0)"
+        plot = "rgba(0,0,0,0)"
+        font_color = "rgba(0,0,0,0.90)"
+        grid_color = "rgba(0,0,0,0.06)"
+        axis_line = "rgba(0,0,0,0.12)"
+
+    fig.update_layout(
+        template="plotly_white",
+        title=dict(text=title or fig.layout.title.text, x=0.0, xanchor="left"),
+        font=dict(
+            family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial",
+            size=13,
+            color=font_color,
+        ),
+        margin=dict(l=10, r=10, t=70, b=10),
+        paper_bgcolor=paper,
+        plot_bgcolor=plot,
+        legend=dict(
+            title_text="",
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            font=dict(color=font_color),
+        ),
+    )
+
+    # Less “chart ink”
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor=grid_color,
+        zeroline=False,
+        showline=False,
+        linecolor=axis_line,
+        ticks="outside",
+    )
+    fig.update_yaxes(
+        showgrid=False,
+        zeroline=False,
+        showline=False,
+        linecolor=axis_line,
+        ticks="outside",
+    )
+
+    # Optional subtitle using an annotation
+    if subtitle:
+        fig.update_layout(
+            annotations=[
+                dict(
+                    text=subtitle,
+                    x=0,
+                    y=1.12,
+                    xref="paper",
+                    yref="paper",
+                    showarrow=False,
+                    align="left",
+                    font=dict(size=12, color=font_color.replace("0.90", "0.65")),
+                )
+            ]
+        )
+
+    return fig
+
+
+# Sidebar theme toggle
+with st.sidebar:
+    st.header("Settings")
+    dark_mode = st.toggle("Dark mode", value=False)
+
+THEME = "dark" if dark_mode else "light"
+inject_css(THEME)
+
+# ----------------------------
+# Data loading / cleaning
+# ----------------------------
+
 ROUTE_COLS = {
     "Pig iron produced (ttpa)": "BF–BOF (Pig iron)",
     "DRI produced (ttpa)": "DRI–EAF",
 }
-
-UNIT_DIVISOR = 1000.0  # ttp a -> Mtpa
+UNIT_DIVISOR = 1000.0  # ttpa -> Mtpa
 
 
 @st.cache_data
@@ -25,23 +216,18 @@ def load_data():
     except UnicodeDecodeError:
         raw_text = raw_bytes.decode("cp1252", errors="replace")
 
-    # Clean up common export issues (trailing semicolons, whitespace)
     cleaned_lines = [line.rstrip().rstrip(";") for line in raw_text.splitlines()]
     cleaned_text = "\n".join(cleaned_lines)
 
     raw_df = pd.read_csv(StringIO(cleaned_text), sep=",", engine="python")
-
     df = raw_df.copy()
 
-    # Standardise missing markers
     df = df.replace("unknown", pd.NA)
 
-    # Keep only expected columns if present (safer when dataset evolves)
     expected = ["Country", *ROUTE_COLS.keys()]
     present = [c for c in expected if c in df.columns]
     df = df[present]
 
-    # Coerce numeric route columns
     for col in ROUTE_COLS.keys():
         if col not in df.columns:
             continue
@@ -49,58 +235,72 @@ def load_data():
             df[col]
             .astype(str)
             .str.strip()
-            .str.replace(".", "", regex=False)  # handle 1.234.567 style
+            .str.replace(".", "", regex=False)
         )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Remove global aggregate row if present
     if "Country" in df.columns and "Global" in df["Country"].astype(str).values:
         df = df[df["Country"] != "Global"]
 
-    # Unit conversion
     numeric_cols = [c for c in ROUTE_COLS.keys() if c in df.columns]
-    df[numeric_cols] = df[numeric_cols] / UNIT_DIVISOR  # Mtpa
+    df[numeric_cols] = df[numeric_cols] / UNIT_DIVISOR
 
     return raw_df, df
 
 
 raw_df, df = load_data()
 
-# --- Page header & framing ---
+# ----------------------------
+# UI Header / framing
+# ----------------------------
+
 st.title("🌍 Global primary steelmaking routes")
 st.caption("Source: Global Energy Monitor – Global Iron & Steel Tracker")
 
-st.markdown("""
-This dashboard focuses on **primary steelmaking routes**, comparing:
-- **BF–BOF** via pig iron production (blast furnace → basic oxygen furnace)
-- **DRI–EAF** via direct reduced iron production (DRI → electric arc furnace)
+st.markdown(
+    """
+<div class="card">
+  <div class="muted">
+    This dashboard compares <b>primary steelmaking routes</b>:
+    <ul>
+      <li><b>BF–BOF</b> via pig iron production (blast furnace → basic oxygen furnace)</li>
+      <li><b>DRI–EAF</b> via direct reduced iron production (DRI → electric arc furnace)</li>
+    </ul>
+    The intent is not to forecast output, but to highlight <b>structural differences</b> relevant to
+    energy use, emissions intensity, and decarbonisation pathways.
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
-The goal is not to forecast output, but to highlight **structural differences**
-in how steel is produced globally — relevant to energy use, emissions intensity,
-and decarbonisation pathways.
-""")
+st.write("")
 
-# --- KPIs ---
+# ----------------------------
+# KPIs
+# ----------------------------
+
 pig_col = "Pig iron produced (ttpa)"
 dri_col = "DRI produced (ttpa)"
 
 total_pig = df[pig_col].sum(skipna=True) if pig_col in df.columns else 0.0
 total_dri = df[dri_col].sum(skipna=True) if dri_col in df.columns else 0.0
 total_primary = total_pig + total_dri
-
 dri_share = (total_dri / total_primary * 100) if total_primary > 0 else None
-
 countries_any = int(df["Country"].nunique()) if "Country" in df.columns else 0
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("BF–BOF (Pig iron)", f"{total_pig:,.0f} Mtpa")
-col2.metric("DRI–EAF (DRI)", f"{total_dri:,.0f} Mtpa")
-col3.metric("DRI share of primary routes", f"{dri_share:.1f}%" if dri_share is not None else "—")
-col4.metric("Countries (any production)", countries_any)
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("BF–BOF (Pig iron)", f"{total_pig:,.0f} Mtpa")
+c2.metric("DRI–EAF (DRI)", f"{total_dri:,.0f} Mtpa")
+c3.metric("DRI share of primary routes", f"{dri_share:.1f}%" if dri_share is not None else "—")
+c4.metric("Countries (any production)", countries_any)
 
-st.divider()
+st.write("")
 
-# --- Top countries chart ---
+# ----------------------------
+# Top countries chart
+# ----------------------------
+
 top_n = st.slider("Top countries", 5, 25, 15)
 
 plot_cols = ["Country"] + [c for c in ROUTE_COLS.keys() if c in df.columns]
@@ -128,9 +328,26 @@ fig_bar = px.bar(
     orientation="h",
     title="Primary steelmaking routes (Top countries)",
 )
-st.plotly_chart(fig_bar, use_container_width=True)
+fig_bar.update_traces(marker_line_width=0, opacity=0.95)
+fig_bar.update_layout(barmode="stack")
+fig_bar.update_traces(hovertemplate="<b>%{y}</b><br>%{x:,.1f} Mtpa<extra></extra>")
+fig_bar = style_plotly(
+    fig_bar,
+    THEME,
+    title="Primary steelmaking routes (Top countries)",
+    subtitle="BF–BOF via pig iron vs DRI–EAF via direct reduced iron (Mtpa)",
+)
 
-# --- Global share donut ---
+st.markdown('<div class="card">', unsafe_allow_html=True)
+st.plotly_chart(fig_bar, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.write("")
+
+# ----------------------------
+# Global share donut
+# ----------------------------
+
 share_df = pd.DataFrame({
     "Route": ["BF–BOF (Pig iron)", "DRI–EAF"],
     "Production (Mtpa)": [total_pig, total_dri],
@@ -140,33 +357,60 @@ fig_pie = px.pie(
     share_df,
     names="Route",
     values="Production (Mtpa)",
-    hole=0.4,
+    hole=0.42,
     title="Global primary steelmaking route split",
 )
-st.plotly_chart(fig_pie, use_container_width=True)
+fig_pie.update_traces(
+    textposition="inside",
+    textinfo="percent",
+    hovertemplate="<b>%{label}</b><br>%{value:,.0f} Mtpa<br>%{percent}<extra></extra>",
+)
+fig_pie = style_plotly(
+    fig_pie,
+    THEME,
+    title="Global primary steelmaking route split",
+    subtitle="Share of BF–BOF vs DRI–EAF within primary routes",
+)
 
-# --- Optional: DRI share by country (high-signal view) ---
+st.markdown('<div class="card">', unsafe_allow_html=True)
+st.plotly_chart(fig_pie, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.write("")
+
+# ----------------------------
+# Country route mix table
+# ----------------------------
+
 st.subheader("Country route mix")
 
 show_mix = st.checkbox("Show DRI share by country (table)", value=True)
 if show_mix and pig_col in df.columns and dri_col in df.columns:
-    mix = df[["Country", pig_col, dri_col]].copy()
-    mix = mix.fillna(0)
+    mix = df[["Country", pig_col, dri_col]].copy().fillna(0)
     mix["Total (Mtpa)"] = mix[pig_col] + mix[dri_col]
     mix["DRI share (%)"] = mix.apply(
         lambda r: (r[dri_col] / r["Total (Mtpa)"] * 100) if r["Total (Mtpa)"] > 0 else pd.NA,
         axis=1
     )
     mix = mix.sort_values("Total (Mtpa)", ascending=False)
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.dataframe(
         mix.rename(columns={
             pig_col: "BF–BOF (Pig iron) Mtpa",
             dri_col: "DRI–EAF (DRI) Mtpa",
         }),
-        use_container_width=True
+        use_container_width=True,
+        height=460
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Data quality / transparency section ---
+st.write("")
+
+# ----------------------------
+# Transparency / QA sections
+# ----------------------------
+
 with st.expander("🔍 Data quality notes"):
     st.markdown(f"""
 - Rows loaded (raw): **{len(raw_df):,}**
