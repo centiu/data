@@ -48,6 +48,16 @@ def load_data():
 
     return df
 
+df = load_data()
+
+# Debug (keep for now)
+st.write("Columns:", df.columns.tolist())
+st.write(df.head())
+
+# Now this is safe
+total_pig_iron = df["Pig iron produced (ttpa)"].sum()
+st.metric("Global Pig Iron Production (Mtpa)", round(total_pig_iron, 1))
+
 # --- Header ---
 st.title("🌍 Global steel production by route")
 st.caption("Source: Global Energy Monitor – Global Iron & Steel Tracker")
@@ -100,6 +110,7 @@ st.plotly_chart(fig_pie, use_container_width=True)
 # --- Data table ---
 with st.expander("📊 View data"):
     st.dataframe(df, use_container_width=True)
+
 
 
 
