@@ -8,7 +8,7 @@ st.set_page_config(page_title="Global Steel Routes", layout="wide")
 
 @st.cache_data
 def load_data():
-    path = pathlib.Path("data/steel_routes.csv")
+    path = pathlib.Path("./steel_routes.csv")
 
     raw_bytes = path.read_bytes()
     try:
@@ -103,3 +103,4 @@ st.plotly_chart(fig_pie, use_container_width=True)
 
 with st.expander("📊 View data"):
     st.dataframe(df, use_container_width=True)
+
