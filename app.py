@@ -42,7 +42,7 @@ def load_data():
 
 df = load_data()
 
-st.title("🌍 Global steel raw material production by type")
+st.title("🌍 Global steel raw material production")
 st.caption("Source: Global Energy Monitor – Global Iron & Steel Tracker")
 
 # KPIs
@@ -82,7 +82,7 @@ fig_bar = px.bar(
     y="Country",
     color="type",
     orientation="h",
-    title="Steel production by type (Top countries)",
+    title="Steel raw materials production (Top countries)",
 )
 st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -103,5 +103,6 @@ st.plotly_chart(fig_pie, use_container_width=True)
 
 with st.expander("📊 View data"):
     st.dataframe(df, use_container_width=True)
+
 
 
