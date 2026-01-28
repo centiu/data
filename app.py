@@ -7,7 +7,7 @@ st.set_page_config(page_title="Global Steel Routes", layout="wide")
 # --- Load data ---
 @st.cache_data
 def load_data():
-    path = "steel_routes.csv"   # change to "data/steel_routes.csv" if it's inside /data
+    path = "data/steel_routes.csv"   # change to "data/steel_routes.csv" if it's inside /data
 
     # Try: TSV + UTF-8, then TSV + latin1, then CSV + UTF-8, then CSV + latin1
     for sep in ["\t", ","]:
@@ -80,4 +80,5 @@ st.plotly_chart(fig_pie, use_container_width=True)
 # --- Data table ---
 with st.expander("📊 View data"):
     st.dataframe(df, use_container_width=True)
+
 
