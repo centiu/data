@@ -7,28 +7,24 @@ st.set_page_config(page_title="Global Steel Routes", layout="wide")
 # --- Load data ---
 @st.cache_data
 def load_data():
-    df = pd.read_csv("steel_routes.csv")
+    path = "steel_routes.csv"   # change to "data/steel_routes.csv" if it's inside /data
 
-    # Replace 'unknown' with NaN
-    df = df.replace("unknown", pd.NA)
+    # Try: TSV + UTF-8, then TSV + latin1, then CSV + UTF-8, then CSV + latin1
+    for sep in ["\t", ","]:
+        for enc in ["utf-8", "utf-8-sig", "cp1252", "latin-1"]:
+            try:
+                df = pd.read_csv(path, sep=sep, encoding=enc, engine="python")
+                # If it loaded as a single column, wrong separator; try next
+                if df.shape[1] == 1:
+                    continue
+                return df
+            except Exception:
+                pass
 
-    # Convert numeric columns
-    numeric_cols = df.columns[1:]
-    for col in numeric_cols:
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(".", "", regex=False)
-            .astype(float)
-        )
-
-    # Remove global aggregate row
-    df = df[df["Country"] != "Global"]
-
-    # Convert ttp a → Mtpa
-    df[numeric_cols] = df[numeric_cols] / 1000
-
-    return df
+    # If we got here, nothing worked
+    raise RuntimeError(
+        "Could not read steel_routes.csv. Try saving as UTF-8 and/or confirm separator is tab."
+    )
 
 df = load_data()
 
@@ -84,3 +80,4 @@ st.plotly_chart(fig_pie, use_container_width=True)
 # --- Data table ---
 with st.expander("📊 View data"):
     st.dataframe(df, use_container_width=True)
+
